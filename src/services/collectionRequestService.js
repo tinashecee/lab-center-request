@@ -12,6 +12,7 @@ import {
 import { db } from './firebase'
 
 const collectionRequestsRef = collection(db, 'collectionRequests')
+const activeDriversRef = collection(db, 'active_drivers')
 
 export const collectionRequestService = {
   async createRequest(requestData) {
@@ -47,7 +48,54 @@ export const collectionRequestService = {
       await updateDoc(doc(db, 'collectionRequests', docRef.id), {
         sample_id: docRef.id
       })
-      
+
+      // Broadcast notification to all ACTIVE drivers (non-blocking)
+      try {
+        const activeDriversQuery = query(activeDriversRef, where('status', '==', 'ACTIVE'))
+        const activeDriversSnapshot = await getDocs(activeDriversQuery)
+        const drivers = activeDriversSnapshot.docs
+          .map(docSnap => docSnap.data())
+          .filter(driver => !!driver.message_token)
+
+        const message = {
+          title: `Sample Collection | ${sampleRequest.priority}`,
+          body: `Location: ${sampleRequest.center_name}`,
+          sample_id: docRef.id,
+          requestedAt: sampleRequest.requested_at,
+          caller_name: `${sampleRequest.caller_name} ${sampleRequest.center_name}`.trim(),
+          caller_number: sampleRequest.caller_number,
+          lat: String(sampleRequest.center_coordinates.lat),
+          lng: String(sampleRequest.center_coordinates.lng),
+          message: sampleRequest.notes || '',
+          notification_type: 'collection',
+        }
+
+        await Promise.all(
+          drivers.map(async (driver) => {
+            try {
+              const response = await fetch('https://app.labpartners.co.zw/send-notification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token: driver.message_token,
+                  message,
+                }),
+              })
+
+              if (!response.ok) {
+                console.warn(
+                  `Failed to send notification to driver ${driver.driver_id || driver.id || 'unknown'}`
+                )
+              }
+            } catch (notifyError) {
+              console.warn('Failed to send notification to driver', driver, notifyError)
+            }
+          })
+        )
+      } catch (broadcastError) {
+        console.warn('Failed to broadcast notifications to active drivers:', broadcastError)
+      }
+
       return docRef.id
     } catch (error) {
       console.error('Error creating collection request:', error)
