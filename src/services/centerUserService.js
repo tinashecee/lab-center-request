@@ -30,6 +30,7 @@ export const centerUserService = {
         centerId: userData.centerId,
         centerName: userData.centerName,
         status: 'pending',
+        email_verified: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }

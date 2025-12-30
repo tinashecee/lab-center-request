@@ -71,6 +71,16 @@
             />
             <p v-if="errors.email" class="mt-1 text-sm text-red-600">{{ errors.email }}</p>
             <p class="mt-1 text-xs text-secondary-500">You will need to use this new email for login after updating</p>
+            <div class="mt-2">
+              <button
+                type="button"
+                @click="sendPasswordResetFromSettings"
+                class="text-sm text-primary-600 hover:text-primary-700"
+                :disabled="resetLoading"
+              >
+                {{ resetLoading ? 'Sending reset email...' : 'Send password reset email' }}
+              </button>
+            </div>
           </div>
 
           <!-- Phone -->
@@ -130,6 +140,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { centerUserService } from '@/services/centerUserService'
+import { authService } from '@/services/authService'
 
 const router = useRouter()
 const { userData, logout } = useAuth()
@@ -144,6 +155,7 @@ const errors = reactive({})
 const error = ref(null)
 const success = ref(null)
 const loading = ref(false)
+const resetLoading = ref(false)
 
 const validateForm = () => {
   Object.keys(errors).forEach(key => delete errors[key])
@@ -267,6 +279,25 @@ const handleLogout = async () => {
     await logout()
   } catch (err) {
     console.error('Logout error:', err)
+  }
+}
+
+const sendPasswordResetFromSettings = async () => {
+  error.value = null
+  success.value = null
+  if (!userData.value?.email) {
+    error.value = 'No email on file to send reset.'
+    return
+  }
+  resetLoading.value = true
+  try {
+    await authService.sendPasswordReset(userData.value.email)
+    success.value = 'Password reset email sent. Please check your inbox.'
+  } catch (err) {
+    console.error('Password reset error:', err)
+    error.value = err.message || 'Failed to send password reset email.'
+  } finally {
+    resetLoading.value = false
   }
 }
 

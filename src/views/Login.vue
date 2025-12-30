@@ -46,6 +46,9 @@
           <div v-if="error" class="text-red-600 text-sm">
             {{ error }}
           </div>
+          <div v-if="info" class="text-green-600 text-sm">
+            {{ info }}
+          </div>
 
           <button
             type="submit"
@@ -54,6 +57,17 @@
           >
             {{ loading ? 'Logging in...' : 'Log In' }}
           </button>
+
+          <div class="flex items-center justify-start text-sm text-gray-600">
+            <button
+              type="button"
+              class="text-primary-600 hover:text-primary-700 font-medium"
+              @click="handleForgotPassword"
+              :disabled="loading || resetLoading"
+            >
+              {{ resetLoading ? 'Sending reset...' : 'Forgot password?' }}
+            </button>
+          </div>
           
           <div class="mt-4 text-center">
             <p class="text-sm text-gray-600">
@@ -89,6 +103,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { authService } from '@/services/authService'
 
 const router = useRouter()
 const { login } = useAuth()
@@ -97,9 +112,12 @@ const email = ref('')
 const password = ref('')
 const error = ref(null)
 const loading = ref(false)
+const info = ref(null)
+const resetLoading = ref(false)
 
 const handleSubmit = async () => {
   error.value = null
+  info.value = null
   loading.value = true
 
   try {
@@ -110,6 +128,25 @@ const handleSubmit = async () => {
     console.error('Login error:', err)
   } finally {
     loading.value = false
+  }
+}
+
+const handleForgotPassword = async () => {
+  error.value = null
+  info.value = null
+  if (!email.value) {
+    error.value = 'Please enter your email to reset your password.'
+    return
+  }
+  resetLoading.value = true
+  try {
+    await authService.sendPasswordReset(email.value)
+    info.value = 'Password reset email sent. Check your inbox.'
+  } catch (err) {
+    console.error('Reset password error:', err)
+    error.value = err.message || 'Failed to send reset email.'
+  } finally {
+    resetLoading.value = false
   }
 }
 </script>

@@ -1,8 +1,9 @@
 import { ref, onUnmounted } from 'vue'
 import { authService } from '@/services/authService'
 import { useRouter } from 'vue-router'
-import { collection, query, where, getDocs } from 'firebase/firestore'
-import { db } from '@/services/firebase'
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
+import { db, auth } from '@/services/firebase'
+import { signOut as firebaseSignOut } from 'firebase/auth'
 
 export function useAuth() {
   const user = ref(null)
@@ -14,6 +15,16 @@ export function useAuth() {
   // Listen to auth state changes
   const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
+      // Enforce verified email before loading user data
+      if (!firebaseUser.emailVerified) {
+        console.warn('User email not verified; signing out.')
+        await firebaseSignOut(auth)
+        user.value = null
+        userData.value = null
+        loading.value = false
+        return
+      }
+
       user.value = firebaseUser
       
       // Check center_users collection first
@@ -24,6 +35,16 @@ export function useAuth() {
         
         if (!centerUserSnapshot.empty) {
           const centerUserData = centerUserSnapshot.docs[0].data()
+
+          // Mirror email_verified field if missing/false but Firebase says verified
+          if (!centerUserData.email_verified && firebaseUser.emailVerified) {
+            try {
+              await updateDoc(doc(db, 'center_users', centerUserSnapshot.docs[0].id), { email_verified: true })
+            } catch (mirrorErr) {
+              console.warn('Could not update email_verified in center_users:', mirrorErr)
+            }
+          }
+
           userData.value = {
             id: centerUserSnapshot.docs[0].id,
             name: centerUserData.name,
@@ -34,16 +55,6 @@ export function useAuth() {
             role: 'Center User',
             department: 'Sample Collection',
             status: centerUserData.status === 'approved' ? 'Active' : centerUserData.status
-          }
-        } else {
-          // Fallback: Check users collection (for existing users)
-          const usersRef = collection(db, 'users')
-          const q = query(usersRef, where('email', '==', firebaseUser.email))
-          const querySnapshot = await getDocs(q)
-          
-          if (!querySnapshot.empty) {
-            const data = querySnapshot.docs[0].data()
-            userData.value = { ...data, id: querySnapshot.docs[0].id }
           }
         }
       } catch (err) {

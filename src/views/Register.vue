@@ -144,7 +144,7 @@
           <!-- Success Message -->
           <div v-if="success" class="p-3 bg-green-50 border border-green-200 rounded-md">
             <p class="text-sm text-green-600">
-              Registration successful! Your account is pending approval. You will be able to login once approved.
+              Registration successful! We sent a verification email. Please verify your email and wait for administrator approval before logging in.
             </p>
           </div>
 
@@ -315,8 +315,17 @@ const handleSubmit = async () => {
       email: formData.email,
       phoneNumber: formData.phoneNumber,
       centerId: formData.centerId,
-      centerName: selectedCenter.name
+      centerName: selectedCenter.name,
+      email_verified: false
     })
+
+    // Send verification email
+    try {
+      console.log('[Register] Sending verification email to', authUser.email)
+      await authService.sendVerificationEmail(authUser)
+    } catch (verifyErr) {
+      console.warn('[Register] Failed to send verification email:', verifyErr)
+    }
     
     // Sign out immediately (user needs approval)
     await signOut(auth)
