@@ -10,9 +10,10 @@ import {
   serverTimestamp 
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { centerService } from './centerService'
 
 const collectionRequestsRef = collection(db, 'collectionRequests')
-const activeDriversRef = collection(db, 'active_drivers')
+const usersRef = collection(db, 'users')
 
 export const collectionRequestService = {
   async createRequest(requestData) {
@@ -49,51 +50,99 @@ export const collectionRequestService = {
         sample_id: docRef.id
       })
 
-      // Broadcast notification to all ACTIVE drivers (non-blocking)
-      try {
-        const activeDriversQuery = query(activeDriversRef, where('status', '==', 'ACTIVE'))
-        const activeDriversSnapshot = await getDocs(activeDriversQuery)
-        const drivers = activeDriversSnapshot.docs
-          .map(docSnap => docSnap.data())
-          .filter(driver => !!driver.message_token)
-
-        const message = {
-          title: `Sample Collection | ${sampleRequest.priority}`,
-          body: `Location: ${sampleRequest.center_name}`,
-          sample_id: docRef.id,
-          requestedAt: sampleRequest.requested_at,
-          caller_name: `${sampleRequest.caller_name} ${sampleRequest.center_name}`.trim(),
-          caller_number: sampleRequest.caller_number,
-          lat: String(sampleRequest.center_coordinates.lat),
-          lng: String(sampleRequest.center_coordinates.lng),
-          message: sampleRequest.notes || '',
-          notification_type: 'collection',
+      // Get route from requestData or fetch from center if not provided
+      let centerRoute = requestData.route || null
+      
+      // If route not provided, try to fetch it from center
+      if (!centerRoute && requestData.center_id) {
+        try {
+          const centerDetails = await centerService.getCenterById(requestData.center_id)
+          if (centerDetails) {
+            centerRoute = centerDetails.route
+          }
+        } catch (routeError) {
+          console.warn('Could not fetch route from center:', routeError)
         }
+      }
 
-        await Promise.all(
-          drivers.map(async (driver) => {
-            try {
-              const response = await fetch('https://app.labpartners.co.zw/send-notification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  token: driver.message_token,
-                  message,
-                }),
-              })
+      // Send notifications to drivers in the same route (non-blocking)
+      if (centerRoute) {
+        try {
+          // Query users collection for drivers with matching route
+          const driversQuery = query(
+            usersRef,
+            where('role', '==', 'Driver'),
+            where('route', '==', centerRoute)
+          )
+          const driversSnapshot = await getDocs(driversQuery)
+          const drivers = driversSnapshot.docs
+            .map(docSnap => docSnap.data())
+            .filter(driver => !!driver.messageToken)
 
-              if (!response.ok) {
-                console.warn(
-                  `Failed to send notification to driver ${driver.driver_id || driver.id || 'unknown'}`
-                )
-              }
-            } catch (notifyError) {
-              console.warn('Failed to send notification to driver', driver, notifyError)
+          if (drivers.length > 0) {
+            const message = {
+              title: `Sample Collection | ${sampleRequest.priority}`,
+              body: `Location: ${sampleRequest.center_name}`,
+              sample_id: docRef.id,
+              requestedAt: sampleRequest.requested_at,
+              caller_name: `${sampleRequest.caller_name} ${sampleRequest.center_name}`.trim(),
+              caller_number: sampleRequest.caller_number,
+              lat: String(sampleRequest.center_coordinates.lat),
+              lng: String(sampleRequest.center_coordinates.lng),
+              message: sampleRequest.notes || '',
+              notification_type: 'collection',
             }
-          })
-        )
-      } catch (broadcastError) {
-        console.warn('Failed to broadcast notifications to active drivers:', broadcastError)
+
+            await Promise.all(
+              drivers.map(async (driver) => {
+                try {
+                  // Use local backend in development, production URL otherwise
+                  const notificationUrl = import.meta.env.DEV 
+                    ? 'http://localhost:3004/send-notification'
+                    : 'https://app.labpartners.co.zw/send-notification'
+                  
+                  const requestBody = {
+                    token: driver.messageToken,
+                    message,
+                  }
+                  
+                  console.log('Sending notification to:', notificationUrl)
+                  console.log('Request body:', JSON.stringify(requestBody, null, 2))
+                  
+                  const response = await fetch(notificationUrl, {
+                    method: 'POST',
+                    headers: { 
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody),
+                  })
+
+                  console.log('Response status:', response.status, response.statusText)
+                  
+                  if (!response.ok) {
+                    const errorText = await response.text()
+                    console.error('Error response:', errorText)
+                    console.warn(
+                      `Failed to send notification to driver ${driver.id || driver.driver_id || 'unknown'}: ${response.status} ${response.statusText}`
+                    )
+                  } else {
+                    const result = await response.json()
+                    console.log('Notification sent successfully:', result)
+                  }
+                } catch (notifyError) {
+                  console.error('Failed to send notification to driver', driver, notifyError)
+                  console.warn('Notification error details:', notifyError.message)
+                }
+              })
+            )
+          } else {
+            console.log(`No drivers found for route: ${centerRoute}`)
+          }
+        } catch (broadcastError) {
+          console.warn('Failed to send notifications to drivers:', broadcastError)
+        }
+      } else {
+        console.warn('No route available for center, skipping driver notifications')
       }
 
       return docRef.id

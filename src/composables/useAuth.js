@@ -20,12 +20,16 @@ export function useAuth() {
       loading.value = true
       const result = await authService.login(centerId)
       
-      // Store in localStorage
-      user.value = { centerId: result.userData.centerId }
-      userData.value = result.userData
-      
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('userData', JSON.stringify(userData.value))
+      // Don't store user data yet if PIN verification is required
+      // PIN setup/verification will be handled in Login.vue
+      // Only store if PIN is not required (shouldn't happen, but handle it)
+      if (!result.requiresPinSetup && !result.requiresPinVerification) {
+        user.value = { centerId: result.userData.centerId }
+        userData.value = result.userData
+        
+        localStorage.setItem('user', JSON.stringify(user.value))
+        localStorage.setItem('userData', JSON.stringify(userData.value))
+      }
       
       return result
     } catch (err) {
@@ -34,6 +38,15 @@ export function useAuth() {
     } finally {
       loading.value = false
     }
+  }
+  
+  const completeLogin = (userDataToStore) => {
+    // Store user data after PIN verification/setup
+    user.value = { centerId: userDataToStore.centerId }
+    userData.value = userDataToStore
+    
+    localStorage.setItem('user', JSON.stringify(user.value))
+    localStorage.setItem('userData', JSON.stringify(userData.value))
   }
   
   const logout = async () => {
@@ -54,6 +67,7 @@ export function useAuth() {
     loading,
     error,
     login,
-    logout
+    logout,
+    completeLogin
   }
 }

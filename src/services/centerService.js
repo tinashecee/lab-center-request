@@ -9,18 +9,19 @@ export const centerService = {
       const snapshot = await getDocs(centersRef)
       return snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data()
-        return {
-          id: docSnapshot.id,
-          name: data.name || data.docFullName || data.centerName || 'Unknown Center',
-          address: data.docAddress || data.address || '',
-          phone: data.docContact || data.phone || '',
-          contactPerson: data.contactPerson || '',
-          coordinates: {
-            lat: data.coordinates?.lat || 0,
-            lng: data.coordinates?.lng || 0
-          },
-          status: data.status || 'active'
-        }
+      return {
+        id: docSnapshot.id,
+        name: data.name || data.docFullName || data.centerName || 'Unknown Center',
+        address: data.docAddress || data.address || '',
+        phone: data.docContact || data.phone || '',
+        contactPerson: data.contactPerson || '',
+        coordinates: {
+          lat: data.coordinates?.lat || 0,
+          lng: data.coordinates?.lng || 0
+        },
+        status: data.status || 'active',
+        route: data.route || ''
+      }
       }).filter(center => center.status === 'active')
     } catch (error) {
       console.error('Error fetching centers:', error)
@@ -47,7 +48,8 @@ export const centerService = {
         coordinates: {
           lat: data.coordinates?.lat || 0,
           lng: data.coordinates?.lng || 0
-        }
+        },
+        route: data.route || ''
       }
     } catch (error) {
       console.error('Error fetching center by ID:', error)
@@ -65,7 +67,8 @@ export const centerService = {
             coordinates: {
               lat: data.coordinates?.lat || 0,
               lng: data.coordinates?.lng || 0
-            }
+            },
+            route: data.route || ''
           }
         }
       } catch (fallbackError) {

@@ -322,7 +322,8 @@ const handleSubmit = async () => {
       caller_number: formData.phoneNumber.trim() || '',
       priority: formData.priority,
       notes: formData.callNotes || '',
-      sample_type: 'center_requested'
+      sample_type: 'center_requested',
+      route: userData.value.route || ''
     }
 
     // Create the request
