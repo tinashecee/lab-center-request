@@ -20,6 +20,21 @@ export const collectionRequestService = {
     try {
       const nowIso = new Date().toISOString()
       
+      // Get route from requestData or fetch from center if not provided
+      let centerRoute = requestData.route || null
+      
+      // If route not provided, try to fetch it from center
+      if (!centerRoute && requestData.center_id) {
+        try {
+          const centerDetails = await centerService.getCenterById(requestData.center_id)
+          if (centerDetails) {
+            centerRoute = centerDetails.route
+          }
+        } catch (routeError) {
+          console.warn('Could not fetch route from center:', routeError)
+        }
+      }
+      
       const sampleRequest = {
         status: 'pending',
         priority: requestData.priority,
@@ -38,6 +53,8 @@ export const collectionRequestService = {
         sample_type: requestData.sample_type || 'general',
         center_id: requestData.center_id || null,
         center_address: requestData.center_address || '',
+        // Include route if available
+        ...(centerRoute ? { route: centerRoute } : {}),
         // Include test information if provided
         ...(requestData.test_ids ? { test_ids: requestData.test_ids } : {}),
         ...(requestData.test_names ? { test_names: requestData.test_names } : {}),
@@ -50,21 +67,6 @@ export const collectionRequestService = {
         sample_id: docRef.id
       })
 
-      // Get route from requestData or fetch from center if not provided
-      let centerRoute = requestData.route || null
-      
-      // If route not provided, try to fetch it from center
-      if (!centerRoute && requestData.center_id) {
-        try {
-          const centerDetails = await centerService.getCenterById(requestData.center_id)
-          if (centerDetails) {
-            centerRoute = centerDetails.route
-          }
-        } catch (routeError) {
-          console.warn('Could not fetch route from center:', routeError)
-        }
-      }
-
       // Send notifications to drivers in the same route (non-blocking)
       if (centerRoute) {
         try {
@@ -75,9 +77,22 @@ export const collectionRequestService = {
             where('route', '==', centerRoute)
           )
           const driversSnapshot = await getDocs(driversQuery)
-          const drivers = driversSnapshot.docs
-            .map(docSnap => docSnap.data())
-            .filter(driver => !!driver.messageToken)
+          const allDrivers = driversSnapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          }))
+          
+          console.log(`🔍 Found ${allDrivers.length} driver(s) with route: ${centerRoute}`)
+          
+          const drivers = allDrivers.filter(driver => {
+            const hasToken = !!driver.messageToken
+            if (!hasToken) {
+              console.warn(`⚠️ Driver ${driver.name || driver.driver_name || driver.id} (ID: ${driver.id}) has no messageToken, skipping`)
+            }
+            return hasToken
+          })
+
+          console.log(`📨 Sending notifications to ${drivers.length} driver(s) with valid tokens`)
 
           if (drivers.length > 0) {
             const message = {
@@ -93,14 +108,18 @@ export const collectionRequestService = {
               notification_type: 'collection',
             }
 
+            console.log(`\n🚀 Starting to send ${drivers.length} notification(s)...`)
+
             await Promise.all(
-              drivers.map(async (driver) => {
+              drivers.map(async (driver, index) => {
                 try {
                   // Use local backend in development, production URL otherwise
                   const notificationUrl = 'http://147.182.222.173:3004/send-notification'
                   
                   const driverId = driver.id || driver.driver_id || 'unknown'
                   const driverName = driver.name || driver.driver_name || 'Unknown Driver'
+                  
+                  console.log(`\n[${index + 1}/${drivers.length}] Processing driver: ${driverName} (ID: ${driverId})`)
                   
                   const requestBody = {
                     token: driver.messageToken,
@@ -121,21 +140,25 @@ export const collectionRequestService = {
 
                   if (!response.ok) {
                     const errorText = await response.text()
-                    console.error(`❌ Failed to send notification to driver ${driverName} (ID: ${driverId}): ${response.status} ${response.statusText}`)
+                    console.error(`❌ [${index + 1}/${drivers.length}] Failed to send notification to driver ${driverName} (ID: ${driverId}): ${response.status} ${response.statusText}`)
                     console.error('Error response:', errorText)
+                    throw new Error(`HTTP ${response.status}: ${errorText}`)
                   } else {
                     const result = await response.json()
-                    console.log(`✅ Notification sent successfully to driver: ${driverName} (ID: ${driverId})`)
+                    console.log(`✅ [${index + 1}/${drivers.length}] Notification sent successfully to driver: ${driverName} (ID: ${driverId})`)
                     console.log(`   Message ID: ${result.response || 'N/A'}`)
                   }
                 } catch (notifyError) {
                   const driverId = driver.id || driver.driver_id || 'unknown'
                   const driverName = driver.name || driver.driver_name || 'Unknown Driver'
-                  console.error(`❌ Failed to send notification to driver ${driverName} (ID: ${driverId})`)
+                  console.error(`❌ [${index + 1}/${drivers.length}] Failed to send notification to driver ${driverName} (ID: ${driverId})`)
                   console.error('Error details:', notifyError.message)
+                  // Don't throw - continue with other drivers
                 }
               })
             )
+            
+            console.log(`\n✅ Completed sending notifications to ${drivers.length} driver(s)\n`)
           } else {
             console.log(`No drivers found for route: ${centerRoute}`)
           }
