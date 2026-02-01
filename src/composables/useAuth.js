@@ -1,85 +1,32 @@
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { authService } from '@/services/authService'
 import { useRouter } from 'vue-router'
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
-import { db, auth } from '@/services/firebase'
-import { signOut as firebaseSignOut } from 'firebase/auth'
 
 export function useAuth() {
-  const user = ref(null)
-  const userData = ref(null)
-  const loading = ref(true)
-  const error = ref(null)
   const router = useRouter()
   
-  // Listen to auth state changes
-  const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
-    if (firebaseUser) {
-      // Enforce verified email before loading user data
-      if (!firebaseUser.emailVerified) {
-        console.warn('User email not verified; signing out.')
-        await firebaseSignOut(auth)
-        user.value = null
-        userData.value = null
-        loading.value = false
-        return
-      }
-
-      user.value = firebaseUser
-      
-      // Check center_users collection first
-      try {
-        const centerUsersRef = collection(db, 'center_users')
-        const centerUserQuery = query(centerUsersRef, where('email', '==', firebaseUser.email))
-        const centerUserSnapshot = await getDocs(centerUserQuery)
-        
-        if (!centerUserSnapshot.empty) {
-          const centerUserData = centerUserSnapshot.docs[0].data()
-
-          // Mirror email_verified field if missing/false but Firebase says verified
-          if (!centerUserData.email_verified && firebaseUser.emailVerified) {
-            try {
-              await updateDoc(doc(db, 'center_users', centerUserSnapshot.docs[0].id), { email_verified: true })
-            } catch (mirrorErr) {
-              console.warn('Could not update email_verified in center_users:', mirrorErr)
-            }
-          }
-
-          userData.value = {
-            id: centerUserSnapshot.docs[0].id,
-            name: centerUserData.name,
-            email: centerUserData.email,
-            phoneNumber: centerUserData.phoneNumber,
-            center: centerUserData.centerName,
-            centerId: centerUserData.centerId,
-            role: 'Center User',
-            department: 'Sample Collection',
-            status: centerUserData.status === 'approved' ? 'Active' : centerUserData.status
-          }
-        }
-      } catch (err) {
-        console.error('Error loading user data:', err)
-      }
-    } else {
-      user.value = null
-      userData.value = null
-    }
-    loading.value = false
-  })
+  // Load user from localStorage immediately
+  const storedUser = localStorage.getItem('user')
+  const storedUserData = localStorage.getItem('userData')
   
-  onUnmounted(() => {
-    if (unsubscribe) {
-      unsubscribe()
-    }
-  })
+  const user = ref(storedUser ? JSON.parse(storedUser) : null)
+  const userData = ref(storedUserData ? JSON.parse(storedUserData) : null)
+  const loading = ref(false)
+  const error = ref(null)
   
-  const login = async (email, password) => {
+  const login = async (centerId, password) => {
     try {
       error.value = null
       loading.value = true
-      const result = await authService.login(email, password)
-      user.value = result.authUser
+      const result = await authService.login(centerId, password)
+      
+      // Store in localStorage
+      user.value = { centerId: result.userData.centerId }
       userData.value = result.userData
+      
+      localStorage.setItem('user', JSON.stringify(user.value))
+      localStorage.setItem('userData', JSON.stringify(userData.value))
+      
       return result
     } catch (err) {
       error.value = err.message || 'Login failed'
@@ -110,4 +57,3 @@ export function useAuth() {
     logout
   }
 }
-

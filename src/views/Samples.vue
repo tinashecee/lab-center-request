@@ -302,6 +302,7 @@ const selectedSample = ref(null)
 
 const statuses = [
   'pending',
+  'accepted',
   'collected',
   'registered',
   'received',
@@ -313,6 +314,13 @@ const statuses = [
 const getHeadersForStatus = (currentStatus) => {
   const headers = {
     pending: [
+      { label: 'Sample ID', field: 'sample_id' },
+      { label: 'Requested At', field: 'requested_at' },
+      { label: 'Time Lapsed', field: 'time_lapsed' },
+      { label: 'Center Name', field: 'center_name' },
+      { label: 'Priority', field: 'priority' }
+    ],
+    accepted: [
       { label: 'Sample ID', field: 'sample_id' },
       { label: 'Requested At', field: 'requested_at' },
       { label: 'Time Lapsed', field: 'time_lapsed' },
@@ -408,6 +416,7 @@ const paginatedSamples = computed(() => {
 const getStatusClass = (status) => {
   const classes = {
     pending: 'px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800',
+    accepted: 'px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800',
     collected: 'px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800',
     registered: 'px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800',
     received: 'px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800',

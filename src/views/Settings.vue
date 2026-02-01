@@ -70,17 +70,6 @@
               placeholder="Enter your email"
             />
             <p v-if="errors.email" class="mt-1 text-sm text-red-600">{{ errors.email }}</p>
-            <p class="mt-1 text-xs text-secondary-500">You will need to use this new email for login after updating</p>
-            <div class="mt-2">
-              <button
-                type="button"
-                @click="sendPasswordResetFromSettings"
-                class="text-sm text-primary-600 hover:text-primary-700"
-                :disabled="resetLoading"
-              >
-                {{ resetLoading ? 'Sending reset email...' : 'Send password reset email' }}
-              </button>
-            </div>
           </div>
 
           <!-- Phone -->
@@ -139,8 +128,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { centerUserService } from '@/services/centerUserService'
-import { authService } from '@/services/authService'
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '@/services/firebase'
 
 const router = useRouter()
 const { userData, logout } = useAuth()
@@ -155,7 +144,6 @@ const errors = reactive({})
 const error = ref(null)
 const success = ref(null)
 const loading = ref(false)
-const resetLoading = ref(false)
 
 const validateForm = () => {
   Object.keys(errors).forEach(key => delete errors[key])
@@ -203,57 +191,26 @@ const handleSubmit = async () => {
   loading.value = true
   
   try {
-    const { updateDoc, doc, serverTimestamp } = await import('firebase/firestore')
-    const { db, auth } = await import('@/services/firebase')
-    const { updateEmail } = await import('firebase/auth')
-    
-    // Check if email has changed
-    const emailChanged = formData.email !== userData.value?.email
-    const currentUser = auth.currentUser
-    
-    // If email changed, update Firebase Auth email first
-    if (emailChanged && currentUser) {
-      try {
-        await updateEmail(currentUser, formData.email)
-      } catch (emailError) {
-        // If updateEmail fails (e.g., requires recent authentication), show helpful error
-        if (emailError.code === 'auth/requires-recent-login') {
-          error.value = 'For security, please log out and log back in before changing your email address.'
-          loading.value = false
-          return
-        }
-        throw emailError
-      }
-    }
-    
     // Update center user in Firestore
     const userDoc = doc(db, 'center_users', userData.value.id)
     const updateData = {
       name: formData.name,
+      email: formData.email,
       phoneNumber: formData.phoneNumber,
       updatedAt: serverTimestamp()
     }
     
-    // Only update email in Firestore if it changed
-    if (emailChanged) {
-      updateData.email = formData.email
-    }
-    
     await updateDoc(userDoc, updateData)
     
-    // Update local user data
+    // Update local user data and localStorage
     userData.value.name = formData.name
+    userData.value.email = formData.email
     userData.value.phoneNumber = formData.phoneNumber
-    if (emailChanged) {
-      userData.value.email = formData.email
-    }
     
-    // Show success message with email change notice if applicable
-    if (emailChanged) {
-      success.value = 'Account updated successfully! Please use your new email address for future logins.'
-    } else {
-      success.value = 'Account updated successfully!'
-    }
+    // Update localStorage
+    localStorage.setItem('userData', JSON.stringify(userData.value))
+    
+    success.value = 'Account updated successfully!'
     
     // Clear success message after 5 seconds
     setTimeout(() => {
@@ -262,13 +219,7 @@ const handleSubmit = async () => {
     
   } catch (err) {
     console.error('Error updating account:', err)
-    if (err.code === 'auth/email-already-in-use') {
-      error.value = 'This email is already in use by another account.'
-    } else if (err.code === 'auth/invalid-email') {
-      error.value = 'Please enter a valid email address.'
-    } else {
-      error.value = err.message || 'Failed to update account. Please try again.'
-    }
+    error.value = err.message || 'Failed to update account. Please try again.'
   } finally {
     loading.value = false
   }
@@ -282,25 +233,6 @@ const handleLogout = async () => {
   }
 }
 
-const sendPasswordResetFromSettings = async () => {
-  error.value = null
-  success.value = null
-  if (!userData.value?.email) {
-    error.value = 'No email on file to send reset.'
-    return
-  }
-  resetLoading.value = true
-  try {
-    await authService.sendPasswordReset(userData.value.email)
-    success.value = 'Password reset email sent. Please check your inbox.'
-  } catch (err) {
-    console.error('Password reset error:', err)
-    error.value = err.message || 'Failed to send password reset email.'
-  } finally {
-    resetLoading.value = false
-  }
-}
-
 onMounted(() => {
   // Initialize form with current user data
   formData.name = userData.value?.name || ''
@@ -308,4 +240,3 @@ onMounted(() => {
   formData.phoneNumber = userData.value?.phoneNumber || ''
 })
 </script>
-

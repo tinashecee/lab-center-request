@@ -32,43 +32,43 @@
 
           <!-- Form -->
           <form @submit.prevent="handleSubmit" class="space-y-4">
-            <!-- Center (Display Only) -->
+            <!-- Requested By (Editable) -->
             <div>
               <label class="block text-sm font-medium text-secondary-700 mb-1">
-                Collection Center
+                Requested By <span class="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                :value="userData?.center || 'Not available'"
-                disabled
-                class="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-secondary-600 cursor-not-allowed"
+                v-model="formData.requestedBy"
+                required
+                :class="[
+                  'w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-primary-500',
+                  formErrors.requestedBy ? 'border-red-500' : 'border-gray-200'
+                ]"
+                placeholder="Enter requester name"
               />
+              <p v-if="formErrors.requestedBy" class="mt-1 text-sm text-red-500">
+                {{ formErrors.requestedBy }}
+              </p>
             </div>
 
-            <!-- Caller Name (Display Only) -->
+            <!-- Phone Number (Optional) -->
             <div>
               <label class="block text-sm font-medium text-secondary-700 mb-1">
-                Contact Person
+                Phone Number
               </label>
               <input
-                type="text"
-                :value="userData?.name || 'Not available'"
-                disabled
-                class="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-secondary-600 cursor-not-allowed"
+                type="tel"
+                v-model="formData.phoneNumber"
+                :class="[
+                  'w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-primary-500',
+                  formErrors.phoneNumber ? 'border-red-500' : 'border-gray-200'
+                ]"
+                placeholder="Enter phone number (optional)"
               />
-            </div>
-
-            <!-- Caller Number (Display Only) -->
-            <div>
-              <label class="block text-sm font-medium text-secondary-700 mb-1">
-                Contact Number
-              </label>
-              <input
-                type="text"
-                :value="userData?.phoneNumber || 'Not available'"
-                disabled
-                class="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-secondary-600 cursor-not-allowed"
-              />
+              <p v-if="formErrors.phoneNumber" class="mt-1 text-sm text-red-500">
+                {{ formErrors.phoneNumber }}
+              </p>
             </div>
 
             <!-- Priority -->
@@ -151,40 +151,85 @@ const { createRequest, loading, error: requestError } = useCollectionRequests()
 
 const error = ref(null)
 const formData = reactive({
+  requestedBy: '',
+  phoneNumber: '',
   priority: '',
   callNotes: ''
 })
 
 const formErrors = reactive({
+  requestedBy: '',
+  phoneNumber: '',
   priority: ''
 })
 
 // Check if form can be submitted
 const canSubmit = computed(() => {
-  return formData.priority && userData.value?.center && userData.value?.centerId
+  const hasRequestedBy = formData.requestedBy && formData.requestedBy.trim().length > 0
+  const hasPriority = formData.priority && formData.priority.length > 0
+  return hasRequestedBy && hasPriority
 })
+
+const resetForm = () => {
+  // Reset to user defaults
+  formData.requestedBy = userData.value?.name || ''
+  formData.phoneNumber = userData.value?.phoneNumber || ''
+  formData.priority = ''
+  formData.callNotes = ''
+  formErrors.requestedBy = ''
+  formErrors.phoneNumber = ''
+  formErrors.priority = ''
+  error.value = null
+}
 
 // Reset form when modal closes
 watch(() => props.isOpen, (newValue) => {
   if (!newValue) {
     resetForm()
+  } else {
+    // Initialize form with user data when modal opens
+    if (userData.value) {
+      formData.requestedBy = userData.value.name || ''
+      formData.phoneNumber = userData.value.phoneNumber || ''
+    }
   }
-})
+}, { immediate: true })
 
-const resetForm = () => {
-  formData.priority = ''
-  formData.callNotes = ''
-  formErrors.priority = ''
-  error.value = null
-}
+// Also watch userData to initialize when it becomes available
+watch(() => userData.value, (newUserData) => {
+  if (newUserData && props.isOpen) {
+    if (!formData.requestedBy) {
+      formData.requestedBy = newUserData.name || ''
+    }
+    if (!formData.phoneNumber) {
+      formData.phoneNumber = newUserData.phoneNumber || ''
+    }
+  }
+}, { immediate: true })
 
 const validateForm = () => {
+  formErrors.requestedBy = ''
+  formErrors.phoneNumber = ''
   formErrors.priority = ''
   let isValid = true
+
+  if (!formData.requestedBy || !formData.requestedBy.trim()) {
+    formErrors.requestedBy = 'Requested by is required'
+    isValid = false
+  }
 
   if (!formData.priority) {
     formErrors.priority = 'Priority is required'
     isValid = false
+  }
+
+  // Optional phone number validation (if provided, should be valid format)
+  if (formData.phoneNumber && formData.phoneNumber.trim()) {
+    const phoneRegex = /^[\d\s\-\+\(\)]+$/
+    if (!phoneRegex.test(formData.phoneNumber.trim())) {
+      formErrors.phoneNumber = 'Please enter a valid phone number'
+      isValid = false
+    }
   }
 
   if (!userData.value?.center) {
@@ -273,8 +318,8 @@ const handleSubmit = async () => {
         lat: centerCoordinates.lat,
         lng: centerCoordinates.lng
       },
-      caller_name: userData.value.name || '',
-      caller_number: userData.value.phoneNumber || '',
+      caller_name: formData.requestedBy.trim(),
+      caller_number: formData.phoneNumber.trim() || '',
       priority: formData.priority,
       notes: formData.callNotes || '',
       sample_type: 'center_requested'

@@ -1,6 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { auth } from '@/services/firebase'
-import { onAuthStateChanged } from 'firebase/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -9,12 +7,6 @@ const router = createRouter({
       path: '/login',
       name: 'Login',
       component: () => import('@/views/Login.vue'),
-      meta: { requiresAuth: false }
-    },
-    {
-      path: '/register',
-      name: 'Register',
-      component: () => import('@/views/Register.vue'),
       meta: { requiresAuth: false }
     },
     {
@@ -56,27 +48,25 @@ const router = createRouter({
 
 // Navigation guard
 router.beforeEach((to, from, next) => {
-  const unsubscribe = onAuthStateChanged(auth, (user) => {
-    unsubscribe()
-    
-    // Allow access to login and register pages without auth
-    if (to.path === '/login' || to.path === '/register') {
-      if (user) {
-        next('/')
-      } else {
-        next()
-      }
-      return
-    }
-    
-    // Protected routes require authentication
-    if (to.meta.requiresAuth && !user) {
-      next('/login')
+  const userData = localStorage.getItem('userData')
+  const isAuthenticated = !!userData
+  
+  // Allow access to login page without auth
+  if (to.path === '/login') {
+    if (isAuthenticated) {
+      next('/')
     } else {
       next()
     }
-  })
+    return
+  }
+  
+  // Protected routes require authentication
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    next('/login')
+  } else {
+    next()
+  }
 })
 
 export default router
-
