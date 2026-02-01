@@ -141,7 +141,7 @@ app.post('/send-notification', async (req, res) => {
     console.error(`   Code: ${error.code || 'N/A'}\n`);
     res.status(500).json({ 
       success: false, 
-      error: error.message 
+      error: error.message   
     });
   }
 });
