@@ -191,16 +191,19 @@ const handleSubmit = async () => {
   loading.value = true
   
   try {
-    // Update center user in Firestore
-    const userDoc = doc(db, 'center_users', userData.value.id)
+    // Update center in Firestore
+    const centerDoc = doc(db, 'centers', userData.value.centerId || userData.value.id)
     const updateData = {
-      name: formData.name,
+      contactPerson: formData.name,
       email: formData.email,
+      contactEmail: formData.email,
+      docContact: formData.phoneNumber,
+      phone: formData.phoneNumber,
       phoneNumber: formData.phoneNumber,
       updatedAt: serverTimestamp()
     }
     
-    await updateDoc(userDoc, updateData)
+    await updateDoc(centerDoc, updateData)
     
     // Update local user data and localStorage
     userData.value.name = formData.name

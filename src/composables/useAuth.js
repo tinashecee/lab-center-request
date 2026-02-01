@@ -14,11 +14,11 @@ export function useAuth() {
   const loading = ref(false)
   const error = ref(null)
   
-  const login = async (centerId, password) => {
+  const login = async (centerId) => {
     try {
       error.value = null
       loading.value = true
-      const result = await authService.login(centerId, password)
+      const result = await authService.login(centerId)
       
       // Store in localStorage
       user.value = { centerId: result.userData.centerId }

@@ -1,48 +1,65 @@
-import { collection, query, where, getDocs } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import { db } from './firebase'
 
 export const authService = {
-  async login(centerId, password) {
+  async login(centerId) {
     try {
-      // Query center_users by center_id
-      const centerUsersRef = collection(db, 'center_users')
-      const centerUserQuery = query(centerUsersRef, where('center_id', '==', centerId))
-      const centerUserSnapshot = await getDocs(centerUserQuery)
+      // Query centers collection - try document ID first
+      const centersRef = collection(db, 'centers')
+      let centerDoc = null
+      let centerData = null
       
-      if (centerUserSnapshot.empty) {
-        throw new Error('Invalid center ID or password')
-      }
-
-      const centerDoc = centerUserSnapshot.docs[0]
-      const centerUserData = centerDoc.data()
-
-      // Verify password (assuming it's stored in the collection)
-      if (centerUserData.password !== password) {
-        throw new Error('Invalid center ID or password')
-      }
-
-      // Check approval status
-      if (centerUserData.status === 'pending') {
-        throw new Error('Your account is pending approval. Please wait for administrator approval.')
+      // First, try to get the document directly by ID
+      try {
+        const docRef = doc(db, 'centers', centerId)
+        const docSnap = await getDoc(docRef)
+        if (docSnap.exists()) {
+          centerDoc = docSnap
+          centerData = docSnap.data()
+        }
+      } catch (docError) {
+        console.log('Direct document access failed, trying query...', docError)
       }
       
-      if (centerUserData.status === 'rejected') {
-        throw new Error('Your account has been rejected. Please contact an administrator.')
+      // If direct access failed, try querying by center_id field
+      if (!centerDoc) {
+        const centerQuery = query(centersRef, where('center_id', '==', centerId))
+        const centerSnapshot = await getDocs(centerQuery)
+        
+        if (!centerSnapshot.empty) {
+          centerDoc = centerSnapshot.docs[0]
+          centerData = centerDoc.data()
+        }
+      }
+      
+      if (!centerDoc || !centerData) {
+        throw new Error('Invalid center ID')
       }
 
-      if (centerUserData.status !== 'approved') {
-        throw new Error('Your account is not approved yet.')
-      }
+      // TEMPORARILY DISABLED: Approval status check
+      // Check approval status - centers might use 'active' instead of 'approved'
+      // if (centerData.status === 'pending') {
+      //   throw new Error('Your account is pending approval. Please wait for administrator approval.')
+      // }
+      // 
+      // if (centerData.status === 'rejected' || centerData.status === 'inactive') {
+      //   throw new Error('Your account has been rejected or is inactive. Please contact an administrator.')
+      // }
+      //
+      // if (centerData.status !== 'approved' && centerData.status !== 'active') {
+      //   throw new Error('Your account is not approved yet.')
+      // }
 
-      // Return user data
+      // Return user data mapped from centers collection
       return {
         userData: {
           id: centerDoc.id,
-          name: centerUserData.name,
-          email: centerUserData.email,
-          phoneNumber: centerUserData.phone || centerUserData.phoneNumber,
-          center: centerUserData.center || centerUserData.centerName,
-          centerId: centerUserData.center_id || centerUserData.centerId,
+          name: centerData.contactPerson || centerData.name || centerData.docFullName || centerData.centerName || 'Center User',
+          email: centerData.email || centerData.contactEmail || '',
+          phoneNumber: centerData.docContact || centerData.phone || centerData.phoneNumber || '',
+          center: centerData.name || centerData.docFullName || centerData.centerName || 'Unknown Center',
+          centerId: centerDoc.id,
+          address: centerData.docAddress || centerData.address || '',
           role: 'Center User',
           department: 'Sample Collection',
           status: 'Active'

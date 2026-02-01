@@ -27,19 +27,7 @@
               required
               v-model="centerId"
               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-            />
-          </div>
-
-          <div>
-            <label for="password" class="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              v-model="password"
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              placeholder="Enter your center ID"
             />
           </div>
 
@@ -85,7 +73,6 @@ const router = useRouter()
 const { login } = useAuth()
 
 const centerId = ref('')
-const password = ref('')
 const error = ref(null)
 const loading = ref(false)
 
@@ -94,10 +81,10 @@ const handleSubmit = async () => {
   loading.value = true
 
   try {
-    await login(centerId.value, password.value)
+    await login(centerId.value)
     router.push('/')
   } catch (err) {
-    error.value = err.message || 'Failed to log in. Please check your credentials.'
+    error.value = err.message || 'Failed to log in. Please check your center ID.'
     console.error('Login error:', err)
   } finally {
     loading.value = false
