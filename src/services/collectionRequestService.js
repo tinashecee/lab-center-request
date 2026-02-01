@@ -97,17 +97,19 @@ export const collectionRequestService = {
               drivers.map(async (driver) => {
                 try {
                   // Use local backend in development, production URL otherwise
-                  const notificationUrl = import.meta.env.DEV 
-                    ? 'http://localhost:3004/send-notification'
-                    : 'https://app.labpartners.co.zw/send-notification'
+                  const notificationUrl = 'http://147.182.222.173:3004/send-notification'
+                  
+                  const driverId = driver.id || driver.driver_id || 'unknown'
+                  const driverName = driver.name || driver.driver_name || 'Unknown Driver'
                   
                   const requestBody = {
                     token: driver.messageToken,
                     message,
+                    driverId: driverId,
+                    driverName: driverName
                   }
                   
-                  console.log('Sending notification to:', notificationUrl)
-                  console.log('Request body:', JSON.stringify(requestBody, null, 2))
+                  console.log(`📤 Sending notification to driver: ${driverName} (ID: ${driverId})`)
                   
                   const response = await fetch(notificationUrl, {
                     method: 'POST',
@@ -117,21 +119,20 @@ export const collectionRequestService = {
                     body: JSON.stringify(requestBody),
                   })
 
-                  console.log('Response status:', response.status, response.statusText)
-                  
                   if (!response.ok) {
                     const errorText = await response.text()
+                    console.error(`❌ Failed to send notification to driver ${driverName} (ID: ${driverId}): ${response.status} ${response.statusText}`)
                     console.error('Error response:', errorText)
-                    console.warn(
-                      `Failed to send notification to driver ${driver.id || driver.driver_id || 'unknown'}: ${response.status} ${response.statusText}`
-                    )
                   } else {
                     const result = await response.json()
-                    console.log('Notification sent successfully:', result)
+                    console.log(`✅ Notification sent successfully to driver: ${driverName} (ID: ${driverId})`)
+                    console.log(`   Message ID: ${result.response || 'N/A'}`)
                   }
                 } catch (notifyError) {
-                  console.error('Failed to send notification to driver', driver, notifyError)
-                  console.warn('Notification error details:', notifyError.message)
+                  const driverId = driver.id || driver.driver_id || 'unknown'
+                  const driverName = driver.name || driver.driver_name || 'Unknown Driver'
+                  console.error(`❌ Failed to send notification to driver ${driverName} (ID: ${driverId})`)
+                  console.error('Error details:', notifyError.message)
                 }
               })
             )

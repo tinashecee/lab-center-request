@@ -82,7 +82,7 @@ app.post('/send-notification', async (req, res) => {
     });
   }
 
-  const { token, message } = req.body;
+  const { token, message, driverId, driverName } = req.body;
 
   // Validate request body
   if (!token) {
@@ -98,6 +98,16 @@ app.post('/send-notification', async (req, res) => {
       error: 'Message is required' 
     });
   }
+
+  // Extract user/driver identifier
+  const userIdentifier = driverName || driverId || token.substring(0, 20) + '...';
+  const timestamp = new Date().toISOString();
+
+  console.log(`\n📤 [${timestamp}] Sending notification to user: ${userIdentifier}`);
+  console.log(`   Driver ID: ${driverId || 'N/A'}`);
+  console.log(`   Title: ${message.title || 'N/A'}`);
+  console.log(`   Body: ${message.body || 'N/A'}`);
+  console.log(`   Sample ID: ${message.sample_id || 'N/A'}`);
 
   const payload = {
     notification: {
@@ -119,10 +129,16 @@ app.post('/send-notification', async (req, res) => {
 
   try {
     const response = await admin.messaging().send(payload);
-    console.log('✅ Notification sent successfully:', response);
+    console.log(`✅ [${timestamp}] Notification sent successfully to user: ${userIdentifier}`);
+    console.log(`   Driver ID: ${driverId || 'N/A'}`);
+    console.log(`   Message ID: ${response}`);
+    console.log(`   Status: Success\n`);
     res.status(200).json({ success: true, response });
   } catch (error) {
-    console.error('❌ Error sending notification:', error);
+    console.error(`❌ [${timestamp}] Error sending notification to user: ${userIdentifier}`);
+    console.error(`   Driver ID: ${driverId || 'N/A'}`);
+    console.error(`   Error: ${error.message}`);
+    console.error(`   Code: ${error.code || 'N/A'}\n`);
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -130,7 +146,7 @@ app.post('/send-notification', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT,'0.0.0.0', () => {
   console.log(`🚀 Notification server running on http://localhost:${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
   console.log(`📨 Send notification: POST http://localhost:${PORT}/send-notification`);
